@@ -7,6 +7,7 @@ HERE = pathlib.Path(__file__).parent
 
 # The text of the README file
 README = (HERE / "README.md").read_text()
+LICENSE = (HERE / "LICENSE").read_text()
 
 version = "0.2"
 artifact_name = "s3_url_helper"
@@ -17,6 +18,7 @@ setup(
     description="S3 Url Helper",
     long_description=README,
     long_description_content_type="text/markdown",
+    license=LICENSE,
     url="https://github.com/n-orlov/s3-url-helper",
     author="Nikolai Orlov",
     author_email="nikolaiorl@gmail.com",
@@ -28,8 +30,6 @@ setup(
             'pytest',
             'pytest-cov',
             'moto',
-            'mock',
-            'pathlib',
             'pylint',
             'assertpy',
             'twine',

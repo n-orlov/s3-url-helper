@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
+from unittest import mock
 
 import boto3
-import mock
 import pytest
 from assertpy import assert_that
 from assertpy.assertpy import AssertionBuilder

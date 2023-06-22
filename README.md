@@ -1,7 +1,8 @@
 ## Overview
 S3Url is a helper class that can help with simple operations on AWS S3 objects.<br>
 ### Installation
-`pip install s3-url-helper`<br>
+Get from https://pypi.org/project/s3-url-helper/
+<br> e.g `pip install s3-url-helper`<br>
 ### Usage
     from s3_url import S3Url
 

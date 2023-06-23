@@ -1,3 +1,5 @@
+[![Coverage Badge](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/n-orlov/f26292d8b498fa22b87e6425ddc7d235/raw/9624db6266b021187ae76483eb2aa7d9f5ed5a75/s3_url_helper_coverage_badge__master.json)](https://gist.github.com/n-orlov/f26292d8b498fa22b87e6425ddc7d235#file-code-coverage-results-md)
+
 ## Overview
 S3Url is a helper class that can help with simple operations on AWS S3 objects.<br>
 ### Installation
@@ -59,9 +61,9 @@ Get from https://pypi.org/project/s3-url-helper/
     # see tests for more examples
 
 ## Development notes
-init deps:
-    
-    install dev dependencies: pip install -e ".[dev]" 
+Install dev dependencies: 
+    pip install .[dev]
+    pip install .[build]
 
 build/upload:
 

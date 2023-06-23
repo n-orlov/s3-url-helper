@@ -1,0 +1,67 @@
+name: Run tests
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Run tests
+        run: python -m pytest -o log_cli=true --cov-report xml:cov.xml --cov-report term --cov=s3_url --junitxml=test-report.xml tests | tee cov-output.txt
+      - name: Extract coverage value
+        run: echo "COVERAGE_SUMMARY=$(tail -4 cov-output.txt | head -1 | rev | cut -d" " -f1 | rev)" >> $GITHUB_ENV
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v3
+        if: success() || failure()
+        with:
+          report_paths: '**/test-report.xml'
+      - name: Generate Coverage Summary Report
+        if: github.ref == 'refs/heads/master'
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: cov.xml
+          badge: true
+          fail_below_min: true
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '60 80'
+
+      - name: Publish coverage report
+        if: github.ref == 'refs/heads/master'
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST }}
+          gist_id: f26292d8b498fa22b87e6425ddc7d235
+          file_path: code-coverage-results.md
+          file_type: text
+
+      - name: Create the Badge
+        if: github.ref == 'refs/heads/master'
+        uses: schneegans/dynamic-badges-action@v1.0.0
+        with:
+          auth: ${{ secrets.GIST }}
+          gistID: f26292d8b498fa22b87e6425ddc7d235
+          filename: s3_url_helper_coverage_badge__master.json
+          label: Test Coverage
+          message: ${{ env.COVERAGE_SUMMARY }}
+          color: green
+          namedLogo: Coverage

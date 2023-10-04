@@ -39,7 +39,8 @@ def test_demo(s3_test_bucket, s3_demo_file):
     assert prefix_exists
 
     # read text/json
-    file_content: str = file_url.read_text()
+    file_content_bin: bytes = file_url.read()
+    file_content_text: str = file_url.read_text()
     file_content_json: json = file_url.read_json()
 
     # delete file
@@ -143,6 +144,19 @@ def test_list_prefix_objects(s3_test_bucket):
     assert_that(list(existing_prefix_url.list_prefix_objects())).is_length(3).contains_only(file_1, file_2, file_3)
 
 
+def test_list_common_prefixes(s3_test_bucket):
+    S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub1/some_file_1.txt').write_text("test")
+    S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub1/some_file_2.txt').write_text("test")
+    S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub2/some_file_3.txt').write_text("test")
+    S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub3/sub4/some_file_3.txt').write_text("test")
+    res = list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/').list_common_prefixes())
+    assert_that(res).is_length(3).contains(
+        S3Url('s3://test-bucket/some_prefix/sub1/'),
+        S3Url('s3://test-bucket/some_prefix/sub2/'),
+        S3Url('s3://test-bucket/some_prefix/sub3/'),
+    )
+
+
 def test_s3_url_exists_for_a_path_access_denied(s3_test_bucket, s3_test_file_3, monkeypatch):
     existing_url = S3Url(f's3://{s3_test_bucket.name}/a/path/to/')
     expected_exc = ClientError({'Error': {'Code': '403', 'Message': 'Forbidden'},
@@ -174,6 +188,7 @@ def test_s3_url_delete_dir(s3_test_bucket, s3_test_file):
 
 def test_s3_url_read_write(s3_test_bucket, s3_test_file):
     url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
+    assert_that(url.read()).is_equal_to(b'{\n  "testEntry1": "value1"\n}')
     assert_that(json.loads(url.read_text())).is_equal_to({
         "testEntry1": "value1"
     })

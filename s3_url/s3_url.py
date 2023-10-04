@@ -1,6 +1,8 @@
+from io import IOBase
 import json
 import threading
-from typing import Union, Iterable
+from pathlib import Path
+from typing import Union, Iterable, IO
 from urllib.parse import urlparse
 
 import boto3
@@ -33,8 +35,6 @@ class S3Url():
     @classmethod
     def from_bucket_key(cls, bucket: str, key: str) -> 'S3Url':
         return S3Url(f's3://{bucket}/{key}')
-
-
 
     def __repr__(self) -> str:
         return self.url
@@ -84,7 +84,10 @@ class S3Url():
                 raise cerr
 
     def read_text(self, encoding="utf-8-sig") -> str:
-        return self.object.get()['Body'].read().decode(encoding)
+        return self.read().decode(encoding)
+
+    def read(self) -> bytes:
+        return self.object.get()['Body'].read()
 
     def read_json(self, encoding="utf-8-sig") -> json:
         return json.loads(self.read_text(encoding))
@@ -92,16 +95,19 @@ class S3Url():
     def delete(self) -> None:
         self.object.delete()
 
-    def write_text(self, body: str, encryption=None) -> None:
+    def write(self, body: Union[str, bytes], encryption=None) -> None:
         if encryption:
             self.object.put(Body=body, ServerSideEncryption=encryption)
         else:
             self.object.put(Body=body)
 
-    def write_json(self, body: json, encryption=None) -> None:
-        self.write_text(json.dumps(body), encryption)
+    def write_text(self, body: str, encryption=None) -> None:
+        self.write(body, encryption)
 
-    def upload_file(self, fileobj, encryption=None):
+    def write_json(self, body: json, encryption=None) -> None:
+        self.write(json.dumps(body), encryption)
+
+    def upload_file(self, fileobj: IO, encryption=None):
         if encryption:
             self.object.upload_fileobj(fileobj, ExtraArgs={
                 'ServerSideEncryption': encryption
@@ -191,6 +197,11 @@ class S3Url():
     def list_prefix_objects(self) -> Iterable['S3Url']:
         for s3_obj in self._object.Bucket().objects.filter(Prefix=self.key):
             yield S3Url(f's3://{s3_obj.bucket_name}/{s3_obj.key}')
+
+    def list_common_prefixes(self) -> Iterable['S3Url']:
+        for prefix in self._local.s3_res.meta.client.list_objects(Bucket=self.bucket, Prefix=self.key, Delimiter='/')[
+            'CommonPrefixes']:
+            yield S3Url(f's3://{self.bucket}/{prefix["Prefix"]}')
 
     def generate_presigned_url_get(self, timeout=3600) -> str:
         return self._local.s3_res.meta.client.generate_presigned_url(

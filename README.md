@@ -62,8 +62,8 @@ Get from https://pypi.org/project/s3-url-helper/
 
 ## Development notes
 Install dev dependencies: 
-    pip install .[dev]
-    pip install .[build]
+    pip install '.[dev]'
+    pip install '.[build]'
 
 build/upload:
 

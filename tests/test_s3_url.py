@@ -144,17 +144,32 @@ def test_list_prefix_objects(s3_test_bucket):
     assert_that(list(existing_prefix_url.list_prefix_objects())).is_length(3).contains_only(file_1, file_2, file_3)
 
 
+def test_list_prefix_objects_non_existing_prefix(s3_test_bucket):
+    existing_prefix_url = S3Url(f's3://{s3_test_bucket.name}/non-existing/')
+    assert_that(list(existing_prefix_url.list_prefix_objects())).is_empty()
+
+
 def test_list_common_prefixes(s3_test_bucket):
     S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub1/some_file_1.txt').write_text("test")
     S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub1/some_file_2.txt').write_text("test")
     S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub2/some_file_3.txt').write_text("test")
     S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub3/sub4/some_file_3.txt').write_text("test")
-    res = list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/').list_common_prefixes())
-    assert_that(res).is_length(3).contains(
+    assert_that(list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub1/').list_common_prefixes())).is_empty()
+    assert_that(list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub2/').list_common_prefixes())).is_empty()
+    assert_that(list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/sub3/').list_common_prefixes())).is_length(1) \
+        .contains(S3Url('s3://test-bucket/some_prefix/sub3/sub4/'))
+    assert_that(list(S3Url(f's3://{s3_test_bucket.name}/some_prefix/').list_common_prefixes())) \
+        .is_length(3) \
+        .contains(
         S3Url('s3://test-bucket/some_prefix/sub1/'),
         S3Url('s3://test-bucket/some_prefix/sub2/'),
         S3Url('s3://test-bucket/some_prefix/sub3/'),
     )
+
+
+def test_list_common_prefixes_empty(s3_test_bucket):
+    res = list(S3Url(f's3://{s3_test_bucket.name}/non-existing/').list_common_prefixes())
+    assert_that(res).is_empty()
 
 
 def test_s3_url_exists_for_a_path_access_denied(s3_test_bucket, s3_test_file_3, monkeypatch):

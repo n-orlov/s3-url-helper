@@ -199,9 +199,12 @@ class S3Url():
             yield S3Url(f's3://{s3_obj.bucket_name}/{s3_obj.key}')
 
     def list_common_prefixes(self) -> Iterable['S3Url']:
-        for prefix in self._local.s3_res.meta.client.list_objects(Bucket=self.bucket, Prefix=self.key, Delimiter='/')[
-            'CommonPrefixes']:
-            yield S3Url(f's3://{self.bucket}/{prefix["Prefix"]}')
+        # for prefix in self._local.s3_res.meta.client.list_objects(Bucket=self.bucket, Prefix=self.key, Delimiter='/')[
+        for prefix in self._local.s3_res.meta.client\
+                .get_paginator('list_objects')\
+                .paginate(Bucket=self.bucket, Prefix=self.key, Delimiter='/').search('CommonPrefixes'):
+            if prefix:
+                yield S3Url(f's3://{self.bucket}/{prefix["Prefix"]}')
 
     def generate_presigned_url_get(self, timeout=3600) -> str:
         return self._local.s3_res.meta.client.generate_presigned_url(

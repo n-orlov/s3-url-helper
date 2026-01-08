@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import boto3
 import pytest
@@ -102,10 +104,26 @@ def test_generate_presigned_url_get(s3_test_bucket, s3_test_file):
     assert_that(requests.get(get_url).content.decode()).is_equal_to(existing_url.read_text())
 
 
+def test_generate_presigned_url_get_with_region(s3_test_bucket, s3_test_file):
+    with patch.dict(os.environ, {'AWS_REGION': 'us-east-1'}):
+        if hasattr(S3Url._local, 's3_res'):
+            delattr(S3Url._local, "s3_res")
+        existing_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
+        get_url = existing_url.generate_presigned_url_get()
+        assert_that(get_url).contains('s3.us-east-1.amazonaws.com')
+        assert_that(requests.get(get_url).content.decode()).is_equal_to(existing_url.read_text())
+
+
 def test_generate_presigned_url_put(s3_test_bucket, s3_test_file):
     non_existing_url = S3Url(f's3://{s3_test_bucket.name}/non_existing_file.txt')
     get_url = non_existing_url.generate_presigned_url_put()
     requests.put(get_url, data="test text file".encode()).raise_for_status()
+    assert_that(non_existing_url.read_text()).is_equal_to("test text file")
+
+def test_generate_presigned_url_put_w_headers(s3_test_bucket, s3_test_file):
+    non_existing_url = S3Url(f's3://{s3_test_bucket.name}/non_existing_file.txt')
+    get_url = non_existing_url.generate_presigned_url_put(ContentType='application/json')
+    requests.put(get_url, data="test text file".encode(), headers={"Content-Type": "application/json"}).raise_for_status()
     assert_that(non_existing_url.read_text()).is_equal_to("test text file")
 
 
@@ -203,7 +221,7 @@ def test_s3_url_delete_dir(s3_test_bucket, s3_test_file):
 
 def test_s3_url_read_write(s3_test_bucket, s3_test_file):
     url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
-    assert_that(url.read()).is_equal_to(b'{\n  "testEntry1": "value1"\n}')
+    assert_that(url.read().replace(b'\r\n', b'\n')).is_equal_to(b'{\n  "testEntry1": "value1"\n}')
     assert_that(json.loads(url.read_text())).is_equal_to({
         "testEntry1": "value1"
     })
@@ -423,6 +441,40 @@ def test_should_copy_tags_to_str(s3_test_bucket, s3_test_file, s3_test_file_2):
     assert_that(target_url).has_s3_tags_equal_to({'tag1': 'value1', 'tag2': 'value2'})
 
 
+def test_should_copy_tags_from_url(s3_test_bucket, s3_test_file, s3_test_file_2):
+    # Given
+    source_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
+    target_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file_2}')
+
+    assert_that(source_url).has_s3_tags_equal_to({})
+    assert_that(target_url).has_s3_tags_equal_to({})
+
+    # When
+    source_url.write_tags({'tag1': 'value1', 'tag2': 'value2'})
+    target_url.copy_tags_from(source_url)
+
+    # Then
+    assert_that(target_url).s3_file_exists()
+    assert_that(target_url).has_s3_tags_equal_to({'tag1': 'value1', 'tag2': 'value2'})
+
+
+def test_should_copy_tags_from_str(s3_test_bucket, s3_test_file, s3_test_file_2):
+    # Given
+    source_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
+    target_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file_2}')
+
+    assert_that(source_url).has_s3_tags_equal_to({})
+    assert_that(target_url).has_s3_tags_equal_to({})
+
+    # When
+    source_url.write_tags({'tag1': 'value1', 'tag2': 'value2'})
+    target_url.copy_tags_from(source_url.url)
+
+    # Then
+    assert_that(target_url).s3_file_exists()
+    assert_that(target_url).has_s3_tags_equal_to({'tag1': 'value1', 'tag2': 'value2'})
+
+
 def test_should_copy_s3_file_with_no_tags(s3_test_bucket, s3_test_file, s3_test_file_2):
     # Given
     source_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
@@ -510,3 +562,16 @@ def test_restore_from_glacier(s3_test_bucket, s3_test_file):
 
     assert_with_timeout(assert_object_restored, 100, 1)
     assert_that(source_url.object.storage_class).is_equal_to("GLACIER")
+
+
+def test_use_as_dict_key(s3_test_bucket):
+    key1 = S3Url(f's3://{s3_test_bucket.name}/test1')
+    key2 = S3Url(f's3://{s3_test_bucket.name}/test2')
+    key3 = S3Url(f's3://{s3_test_bucket.name}/test3')
+
+    test_dict = {key1: 'value1', key2: 'value2', key3: 'value3'}
+
+
+    assert_that(test_dict[key1]).is_equal_to('value1')
+    assert_that(test_dict[key2]).is_equal_to('value2')
+    assert_that(test_dict[key3]).is_equal_to('value3')

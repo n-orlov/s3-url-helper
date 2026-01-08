@@ -6,7 +6,7 @@ import boto3
 import pytest
 from assertpy import assert_that
 from assertpy.assertpy import AssertionBuilder
-from moto import mock_s3
+from moto import mock_aws
 from typing import Callable
 from datetime import datetime
 import time
@@ -31,7 +31,7 @@ def aws_defaults():
 
 @pytest.fixture(autouse=True)
 def s3_moto():
-    with mock_s3():
+    with mock_aws():
         S3Url._s3_res = boto3.resource('s3')
         yield
 

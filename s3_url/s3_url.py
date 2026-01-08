@@ -1,8 +1,9 @@
+import os
 from io import IOBase
 import json
 import threading
 from pathlib import Path
-from typing import Union, Iterable, IO
+from typing import Union, Iterable, IO, Any
 from urllib.parse import urlparse
 
 import boto3
@@ -24,7 +25,7 @@ class S3Url():
             url = url.url
         else:
             if not url.startswith('s3://'):
-                raise Exception(f'Unsupported URL: {url}. It must start with s3://')
+                raise ValueError(f'Unsupported URL: {url}. It must start with s3://')
         self._parsed = urlparse(url, allow_fragments=False)
         self._object = self._local.s3_res.Object(self.bucket, self.key)
 
@@ -66,7 +67,7 @@ class S3Url():
             self.object.load()
             return True
         except ClientError as cerr:
-            if '404' in str(cerr):
+            if cerr.response['Error']['Code'] == '404':
                 return False
             else:
                 raise cerr
@@ -78,7 +79,7 @@ class S3Url():
         except StopIteration:
             return False
         except ClientError as cerr:
-            if '404' in str(cerr):
+            if cerr.response['Error']['Code'] == '404':
                 return False
             else:
                 raise cerr
@@ -89,7 +90,7 @@ class S3Url():
     def read(self) -> bytes:
         return self.object.get()['Body'].read()
 
-    def read_json(self, encoding="utf-8-sig") -> json:
+    def read_json(self, encoding="utf-8-sig") -> Any:
         return json.loads(self.read_text(encoding))
 
     def delete(self) -> None:
@@ -104,8 +105,8 @@ class S3Url():
     def write_text(self, body: str, encryption=None) -> None:
         self.write(body, encryption)
 
-    def write_json(self, body: json, encryption=None) -> None:
-        self.write(json.dumps(body), encryption)
+    def write_json(self, body: Any, encryption=None) -> None:
+        self.write(json.dumps(body, default=str), encryption)
 
     def upload_file(self, fileobj: IO, encryption=None):
         if encryption:
@@ -131,15 +132,13 @@ class S3Url():
             )
 
     def read_tags(self) -> dict:
-        tags_dict = {}
         tags = self._local.s3_res.meta.client.get_object_tagging(
             Bucket=self.bucket,
             Key=self.key,
         )
         if tags:
-            tags_dict = {x['Key']: x['Value'] for x in tags['TagSet']}
-
-        return tags_dict
+            return {x['Key']: x['Value'] for x in tags['TagSet']}
+        return {}
 
     def transition_to_storage_tier(self, storage_tier: str):
         return self._local.s3_res.meta.client.copy_object(
@@ -191,31 +190,40 @@ class S3Url():
             source_obj = source_url
         else:
             source_obj = S3Url(source_url)
-        source_tags = source_obj.read_tags()
-        self.write_tags(source_tags)
+        source_obj.copy_tags_to(self)
 
     def list_prefix_objects(self) -> Iterable['S3Url']:
         for s3_obj in self._object.Bucket().objects.filter(Prefix=self.key):
             yield S3Url(f's3://{s3_obj.bucket_name}/{s3_obj.key}')
 
     def list_common_prefixes(self) -> Iterable['S3Url']:
-        # for prefix in self._local.s3_res.meta.client.list_objects(Bucket=self.bucket, Prefix=self.key, Delimiter='/')[
-        for prefix in self._local.s3_res.meta.client\
-                .get_paginator('list_objects')\
+        for prefix in self._local.s3_res.meta.client \
+                .get_paginator('list_objects') \
                 .paginate(Bucket=self.bucket, Prefix=self.key, Delimiter='/').search('CommonPrefixes'):
             if prefix:
                 yield S3Url(f's3://{self.bucket}/{prefix["Prefix"]}')
 
     def generate_presigned_url_get(self, timeout=3600) -> str:
-        return self._local.s3_res.meta.client.generate_presigned_url(
+        return self._enforce_regional_endpoint(self._local.s3_res.meta.client.generate_presigned_url(
             ClientMethod='get_object',
             Params={'Bucket': self.bucket, 'Key': self.key},
             ExpiresIn=timeout
-        )
+        ))
 
-    def generate_presigned_url_put(self, timeout=3600) -> str:
-        return self._local.s3_res.meta.client.generate_presigned_url(
+    def generate_presigned_url_put(self, timeout=3600, **params) -> str:
+        return self._enforce_regional_endpoint(self._local.s3_res.meta.client.generate_presigned_url(
             ClientMethod='put_object',
-            Params={'Bucket': self.bucket, 'Key': self.key},
+            Params={'Bucket': self.bucket, 'Key': self.key, **params},
             ExpiresIn=timeout
-        )
+        ))
+
+    def _enforce_regional_endpoint(self, url: str) -> str:
+        if self._local.s3_res.meta.client.meta.region_name:
+            # a little fix to make url regional to avoid issues with VPC endpoint routing that occur sometimes
+            # see https://repost.aws/knowledge-center/s3-http-307-response
+            return url.replace(
+                ".s3.amazonaws.com",
+                f".s3.{self._local.s3_res.meta.client.meta.region_name}.amazonaws.com")
+        else:
+            return url
+

@@ -104,14 +104,19 @@ def test_generate_presigned_url_get(s3_test_bucket, s3_test_file):
     assert_that(requests.get(get_url).content.decode()).is_equal_to(existing_url.read_text())
 
 
-def test_generate_presigned_url_get_with_region(s3_test_bucket, s3_test_file):
+@pytest.fixture
+def us_east_1_region():
     with patch.dict(os.environ, {'AWS_REGION': 'us-east-1'}):
         if hasattr(S3Url._local, 's3_res'):
             delattr(S3Url._local, "s3_res")
-        existing_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
-        get_url = existing_url.generate_presigned_url_get()
-        assert_that(get_url).contains('s3.us-east-1.amazonaws.com')
-        assert_that(requests.get(get_url).content.decode()).is_equal_to(existing_url.read_text())
+        yield
+
+
+def test_generate_presigned_url_get_with_region(s3_test_bucket, s3_test_file, us_east_1_region):
+    existing_url = S3Url(f's3://{s3_test_bucket.name}/{s3_test_file}')
+    get_url = existing_url.generate_presigned_url_get()
+    assert_that(get_url).contains('s3.us-east-1.amazonaws.com')
+    assert_that(requests.get(get_url).content.decode()).is_equal_to(existing_url.read_text())
 
 
 def test_generate_presigned_url_put(s3_test_bucket, s3_test_file):
